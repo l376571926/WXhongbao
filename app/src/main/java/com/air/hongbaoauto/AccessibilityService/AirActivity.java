@@ -28,7 +28,5 @@ public class AirActivity extends AppCompatActivity {
             AirAccessibilityService.ALL = true;
             ((Button) v).setText("对话内监控+开");
         }
-        ;
-
     }
 }

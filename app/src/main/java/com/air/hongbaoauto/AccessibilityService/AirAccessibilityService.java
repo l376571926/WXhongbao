@@ -8,9 +8,10 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.os.Build;
 import android.os.PowerManager;
-import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+
+import com.socks.library.KLog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,67 +19,61 @@ import java.util.List;
 
 public class AirAccessibilityService extends AccessibilityService {
 
-    public static boolean ALL = false;
+    public static boolean ALL = true;
     private List<AccessibilityNodeInfo> parents;
     private boolean auto = false;
     private int lastbagnum;
-    String pubclassName;
-    String lastMAIN;
     private boolean WXMAIN = false;
 
-    private boolean enableKeyguard = true;//默认有屏幕锁
-    private KeyguardManager km;
-    private KeyguardManager.KeyguardLock kl;
-    //唤醒屏幕相关
-    private PowerManager pm;
-    private PowerManager.WakeLock wl = null;
+    private KeyguardManager.KeyguardLock keyguardLock;
+    private PowerManager.WakeLock wakeLock = null;
+
+    private static String CHAT_LIST_ITEM = "com.tencent.mm:id/aja";//微信红包，父布局，android.widget.LinearLayout
+    private static String CHAT_LIST_ITEM_SUBTITLE = "com.tencent.mm:id/aje";//微信红包，android.view.View
+    private static String HB_CLOSE = "com.tencent.mm:id/bmu";//红包界面，关闭按钮
+    private static String HB_OPEN = "com.tencent.mm:id/bp6";//红包界面，开红包按钮,第次安全apk好像都会变？
+    private static String HB_DETAIL_CLOSE = "com.tencent.mm:id/hd";//红包详情，后退按钮
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         parents = new ArrayList<>();
-
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         int eventType = event.getEventType();
-        if (auto)
-            Log.e("AAAAAAAA", "有事件" + eventType);
         switch (eventType) {
             //当通知栏发生改变时
-            case 2048:
-                pubclassName = event.getClassName().toString();
-
-                Log.e("AAAAAAAA", "有2048事件" + pubclassName + auto);
-
+            case AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED://2048
+                KLog.e("发生事件，窗口内容改变");
+                String pubclassName = event.getClassName().toString();
+                KLog.e("有2048事件---->" + auto + " " + pubclassName);
                 if (!auto && pubclassName.equals("android.widget.TextView") && ALL) {
-                    Log.e("AAAAAAAA", "有2048事件被识别" + auto + pubclassName);
+                    KLog.e("有2048事件被识别---->" + auto + " " + pubclassName);
                     getLastPacket(1);
                 }
                 if (auto && WXMAIN) {
                     getLastPacket();
                     auto = false;
                 }
-
                 break;
-            case AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED:
-
-                Log.e("AAAAAAAA", "youtongzhi");
+            case AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED://64
+                KLog.e("发生事件，通知栏状态改变");
                 List<CharSequence> texts = event.getText();
                 if (!texts.isEmpty()) {
                     for (CharSequence text : texts) {
                         String content = text.toString();
-                        Log.e("AAAAAAAA", "youtongzhi"+content);
+                        KLog.e("youtongzhi" + content);
                         if (content.contains("微信红包")) {
-                            if (event.getParcelableData() != null &&
-                                    event.getParcelableData() instanceof Notification) {
+                            if (event.getParcelableData() != null && event.getParcelableData() instanceof Notification) {
                                 Notification notification = (Notification) event.getParcelableData();
                                 PendingIntent pendingIntent = notification.contentIntent;
                                 try {
                                     auto = true;
                                     wakeAndUnlock2(true);
                                     pendingIntent.send();
-                                    Log.e("AAAAAAAA", "进入微信" + auto + event.getClassName().toString());
+                                    KLog.e("进入微信" + auto + event.getClassName().toString());
                                 } catch (Exception e) {
                                     e.printStackTrace();
                                 }
@@ -88,32 +83,46 @@ public class AirAccessibilityService extends AccessibilityService {
                 }
                 break;
             //当窗口的状态发生改变时
-            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED:
+            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED://32
                 String className = event.getClassName().toString();
-                if (className.equals("com.tencent.mm.ui.LauncherUI")) {
-                    //点击最后一个红包
-                    Log.e("AAAAAAAA", "点击红包");
-                    if (auto)
-                        getLastPacket();
-                    auto = false;
-                    WXMAIN = true;
-                } else if (className.equals("com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyReceiveUI")) {
-                    //开红包6.5.3 be_
-                    // 6.3.32bdh
-                    Log.e("AAAAAAAA", "开红包");
-                    click("com.tencent.mm:id/bdh");
-                    auto = false;
-                    WXMAIN = false;
-                } else if (className.equals("com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI")) {
-                    //退出红包
-                    Log.e("AAAAAAAA", "退出红包");
-                    click("com.tencent.mm:id/gq");
-                    WXMAIN = false;
-
-                } else {
-                    WXMAIN = false;
-                    lastMAIN = className;
+                KLog.e("发生事件，窗口状态改变---》" + className);
+                switch (className) {
+                    case "com.tencent.mm.ui.LauncherUI":
+                        //点击最后一个红包
+                        KLog.e("点击红包");
+                        if (auto)
+                            getLastPacket();
+                        auto = false;
+                        WXMAIN = true;
+                        break;
+                    case "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyReceiveUI":
+                        //开红包6.5.3 be_
+                        // 6.3.32bdh
+                        KLog.e("开红包--->" + className);//開
+                        click("com.tencent.mm:id/bdh");//
+                        auto = false;
+                        WXMAIN = false;
+                        break;
+                    case "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI"://红包详情
+                        //退出红包
+                        KLog.e("退出红包");
+                        click(HB_DETAIL_CLOSE);//gq---->hd
+                        WXMAIN = false;
+                        break;
+                    case "com.tencent.mm.plugin.luckymoney.ui.En_fba4b94f":
+                        KLog.e("开红包---->" + className);
+                        click(HB_OPEN);//bdh--->bnr
+                        auto = false;
+                        WXMAIN = false;
+                        break;
+                    default:
+                        KLog.e("未处理事件----->" + eventType);
+                        WXMAIN = false;
+                        break;
                 }
+                break;
+            default:
+                KLog.e("检测到处理事件----》" + eventType);
                 break;
         }
     }
@@ -123,6 +132,18 @@ public class AirAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
         if (nodeInfo != null) {
             List<AccessibilityNodeInfo> list = nodeInfo.findAccessibilityNodeInfosByViewId(clickId);
+            KLog.e("控件未找到---》" + clickId + " " + list.size());
+            for (AccessibilityNodeInfo item : list) {
+                item.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+        }
+    }
+
+    private void clickByText(String text) {
+        AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
+        if (nodeInfo != null) {
+//            List<AccessibilityNodeInfo> list = nodeInfo.findAccessibilityNodeInfosByViewId(clickId);
+            List<AccessibilityNodeInfo> list = nodeInfo.findAccessibilityNodeInfosByText(text);
             for (AccessibilityNodeInfo item : list) {
                 item.performAction(AccessibilityNodeInfo.ACTION_CLICK);
             }
@@ -130,10 +151,9 @@ public class AirAccessibilityService extends AccessibilityService {
     }
 
     private void getLastPacket() {
-
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         recycle(rootNode);
-        Log.e("AAAAAAAA", "当前页面红包数老方法" + parents.size());
+        KLog.e("当前页面红包数老方法--->" + parents.size());
         if (parents.size() > 0) {
             parents.get(parents.size() - 1).performAction(AccessibilityNodeInfo.ACTION_CLICK);
             lastbagnum = parents.size();
@@ -142,13 +162,12 @@ public class AirAccessibilityService extends AccessibilityService {
     }
 
     private void getLastPacket(int c) {
-
-        Log.e("AAAAAAAA", "新方法" + parents.size());
+        KLog.e("新方法--->" + parents.size());
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         recycle(rootNode);
-        Log.e("AAAAAAAA", "last++" + lastbagnum + "当前页面红包数" + parents.size());
+        KLog.e("last++--->" + lastbagnum + "，当前页面红包数--->" + parents.size());
         if (parents.size() > 0 && WXMAIN) {
-            Log.e("AAAAAAAA", "页面大于O且在微信界面");
+            KLog.e("页面大于O且在微信界面");
             if (lastbagnum < parents.size())
                 parents.get(parents.size() - 1).performAction(AccessibilityNodeInfo.ACTION_CLICK);
             lastbagnum = parents.size();
@@ -156,65 +175,64 @@ public class AirAccessibilityService extends AccessibilityService {
         }
     }
 
+    /**
+     * 遍历所有可点击元素
+     *
+     * @param info
+     */
     public void recycle(AccessibilityNodeInfo info) {
-        try {
-            if (info.getChildCount() == 0) {
-                if (info.getText() != null) {
-                    if ("领取红包".equals(info.getText().toString())) {
-                        if (info.isClickable()) {
-                            info.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                        }
-                        AccessibilityNodeInfo parent = info.getParent();
-                        while (parent != null) {
-                            if (parent.isClickable()) {
-                                parents.add(parent);
-                                break;
-                            }
-                            parent = parent.getParent();
-                        }
+        int childCount = info.getChildCount();
+        if (childCount == 0) {
+            if (info.getText() != null) {
+                CharSequence className = info.getClassName();
+                String string = info.getText().toString();
+//                KLog.e(string);
+                if ("领取红包".equals(string)) {
+                    //这里有一个问题需要注意，就是需要找到一个可以点击的View
+                    KLog.e("Click" + ",isClick:" + info.isClickable());
+                    if (info.isClickable()) {
+                        info.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                     }
-                }
-            } else {
-                for (int i = 0; i < info.getChildCount(); i++) {
-                    if (info.getChild(i) != null) {
-                        recycle(info.getChild(i));
+                    AccessibilityNodeInfo parent = info.getParent();
+                    while (parent != null) {
+                        KLog.e("parent isClick:" + parent.isClickable());
+                        if (parent.isClickable()) {
+                            parents.add(parent);
+                            break;
+                        }
+                        parent = parent.getParent();
                     }
                 }
             }
-        } catch (Exception e) {
-
-
+        } else {
+            for (int i = 0; i < childCount; i++) {
+                AccessibilityNodeInfo accessibilityNodeInfo = info.getChild(i);
+                if (accessibilityNodeInfo != null) {
+                    recycle(accessibilityNodeInfo);
+                }
+            }
         }
     }
-    private void wakeAndUnlock2(boolean b)
-    {
-        if(b)
-        {
+
+    private void wakeAndUnlock2(boolean b) {
+        if (b) {
             //获取电源管理器对象
-            pm=(PowerManager) getSystemService(Context.POWER_SERVICE);
-
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             //获取PowerManager.WakeLock对象，后面的参数|表示同时传入两个值，最后的是调试用的Tag
-            wl = pm.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "bright");
-
+            wakeLock = pm.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "bright");
             //点亮屏幕
-            wl.acquire();
-
+            wakeLock.acquire();
             //得到键盘锁管理器对象
-            km= (KeyguardManager)getSystemService(Context.KEYGUARD_SERVICE);
-            kl = km.newKeyguardLock("unLock");
-
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            keyguardLock = km.newKeyguardLock("unLock");
             //解锁
-            kl.disableKeyguard();
-        }
-        else
-        {
+            keyguardLock.disableKeyguard();
+        } else {
             //锁屏
-            kl.reenableKeyguard();
-
+            keyguardLock.reenableKeyguard();
             //释放wakeLock，关灯
-            wl.release();
+            wakeLock.release();
         }
-
     }
 
     @Override
